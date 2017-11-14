@@ -6,6 +6,7 @@ import sys
 import time
 import sqlite3
 
+
 DEBUG = True
 NPROC = 4
 FIELDS = [
@@ -56,6 +57,8 @@ def read_til_break(fptr):
     txt = [line.strip()]
     while line and line != '\n':
         line = fptr.readline()
+        if not line:
+            return False
         txt.append(line.strip())
 
     return [entry for entry in txt if entry]
@@ -86,21 +89,31 @@ def build_insert(game):
     return row[:-2]
 
 
-def worker(pgn, worker_index, n_game):
+def parse_insert_one_row(cursor, pgn):
+
+    parsed = read_til_break(pgn)
+    if not isinstance(parsed, list):
+        return False
+    game = pgn2dict(parsed)
+    game['Moves'] = read_til_break(pgn)[0]
+
+    row = build_insert(game)
+    if "?" in row:
+        return True
+    cmd = 'INSERT INTO games VALUES (%s)' % (row)
+    cursor.execute(cmd)
+    return True
+
+
+def worker(pgn, worker_index):
     """ multiprocessing target
     orient to correct location in file, create a unique sql connection
     and iterate over games until done
     """
 
-    # orient to location in file
-    pgn.seek(0)
-    n_skip_games = n_game * worker_index
-    print("finding game %d..." % (n_skip_games))
-    consume_newlines(pgn, n_skip_games * 2)
-
     # setup sql db
     dbname = sys.argv[1].replace('.pgn', '-worker%0.2d.sql' % (worker_index))
-    print("connecting to db %s..." % (dbname))
+    print("worker%0.2d: connecting to db %s..." % (worker_index, dbname))
     sql = sqlite3.connect(dbname)
     cursor = sql.cursor()
     cursor.execute(
@@ -108,23 +121,22 @@ def worker(pgn, worker_index, n_game):
         % (', '.join([' '.join(column) for column in FIELDS])))
 
     # loop over games
-    for i in range(n_game):
-        if i % 100 == 0:
+    i = 0
+    while True:
+        i += 1
+        if i % 1000 == 0:
             printprogress(
-                "%s Worker %d: %.2f percent..."
-                % (__file__, worker_index, 100 * float(i) / n_game))
-        game = pgn2dict(read_til_break(pgn))
-        game['Moves'] = read_til_break(pgn)[0]
+                "%s worker %0.2d: %d processed..."
+                % (__file__, worker_index, i))
 
         try:
-            row = build_insert(game)
-            if "?" in row:
-                continue
-            cmd = 'INSERT INTO games VALUES (%s)' % (row)
-            cursor.execute(cmd)
-        except Exception as e:
-            import bpdb; bpdb.set_trace()
-            raise(e)
+            result = parse_insert_one_row(cursor, pgn)
+        except:
+            print("problem with game %d..." % (i))
+            pass
+
+        if not result:
+            break
 
     print('complete')
     # clean up
@@ -150,17 +162,17 @@ def count_games(fptr):
     return n_game
 
 
-def main(pgn):
+def main():
     """ pgn2sql main
     """
 
-    n_game = count_games(pgn)
+    pgn = open(sys.argv[1])
 
     # create multiple processes
     procs = [
         multiprocessing.Process(
             target=worker,
-            args=(pgn, idx, n_game / NPROC))
+            args=(pgn, idx))
         for idx in range(NPROC)]
 
     # start the processes and monitor
@@ -170,13 +182,12 @@ def main(pgn):
     while any([proc.is_alive() for proc in procs]):
         time.sleep(1)
 
+    pgn.close()
 
 if __name__ == "__main__":
-    pgn = open(sys.argv[1])
-
     if DEBUG:
-        worker(pgn, 0, count_games(pgn))
+        pgn = open(sys.argv[1])
+        worker(pgn, 0)
+        pgn.close()
     else:
-        main(pgn)
-
-    pgn.close()
+        main()
