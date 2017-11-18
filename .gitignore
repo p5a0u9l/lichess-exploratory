@@ -4,3 +4,5 @@
 *sql
 *pyc
 *sql-journal
+*bz2
+.python-version

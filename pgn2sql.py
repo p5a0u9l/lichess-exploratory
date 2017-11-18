@@ -1,4 +1,5 @@
-#!/usr/bin/env python
+""" convert a file of pgn chess games to a sqlite3 database
+"""
 
 import multiprocessing
 import re
@@ -42,12 +43,13 @@ def pgn2dict(txt):
 
 
 def consume_newlines(fptr, nnl):
-    n = 0
+    """ consume_newlines """
+    nl_count = 0
     line = fptr.readline()
-    while line and n < nnl:
+    while line and nl_count < nnl:
         line = fptr.readline()
         if line == "\n":
-            n += 1
+            nl_count += 1
 
 
 def read_til_break(fptr):
@@ -90,6 +92,7 @@ def build_insert(game):
 
 
 def parse_insert_one_row(cursor, pgn):
+    """ parse_insert_one_row """
 
     parsed = read_til_break(pgn)
     if not isinstance(parsed, list):
@@ -129,11 +132,7 @@ def worker(pgn, worker_index):
                 "%s worker %0.2d: %d processed..."
                 % (__file__, worker_index, i))
 
-        try:
-            result = parse_insert_one_row(cursor, pgn)
-        except:
-            print("problem with game %d..." % (i))
-            pass
+        result = parse_insert_one_row(cursor, pgn)
 
         if not result:
             break
@@ -145,6 +144,7 @@ def worker(pgn, worker_index):
 
 
 def count_games(fptr):
+    """ count_games """
     count = 0
     line = fptr.readline()
     while line:
@@ -166,28 +166,26 @@ def main():
     """ pgn2sql main
     """
 
-    pgn = open(sys.argv[1])
+    pgn_file = open(sys.argv[1])
 
     # create multiple processes
-    procs = [
-        multiprocessing.Process(
-            target=worker,
-            args=(pgn, idx))
-        for idx in range(NPROC)]
+    if NPROC > 1:
+        procs = [
+            multiprocessing.Process(
+                target=worker,
+                args=(pgn_file, idx))
+            for idx in range(NPROC)]
 
-    # start the processes and monitor
-    for proc in procs:
-        proc.start()
+        # start the processes and monitor
+        for proc in procs:
+            proc.start()
 
-    while any([proc.is_alive() for proc in procs]):
-        time.sleep(1)
+        while any([proc.is_alive() for proc in procs]):
+            time.sleep(1)
+    else:
+        worker(pgn_file, 0)
 
-    pgn.close()
+    pgn_file.close()
 
 if __name__ == "__main__":
-    if DEBUG:
-        pgn = open(sys.argv[1])
-        worker(pgn, 0)
-        pgn.close()
-    else:
-        main()
+    main()
