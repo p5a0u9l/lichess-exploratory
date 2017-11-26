@@ -6,7 +6,10 @@ import sys
 import re
 
 DATAROOT = os.path.join("/mnt", "data", "chess")
+DBNAME = "lichess_games.sql"
 URLROOT = "https://database.lichess.org/standard"
+TESTPGNNAME = "tester.pgn.bz2"
+TESTDBNAME = "test_lichess_games.sql"
 PLAYER_FIELDS = [
     ('Handle', 'text'),
     ('N_Game', 'real'),
@@ -30,9 +33,9 @@ GAME_FIELDS = [
     ('White', 'text'),
     ('TimeControl', 'text'),
     ('Event', 'text')]
-DBNAME = "lichess_games.sql"
 MINELO = 800
 MAXELO = 2900
+QUIET = False
 
 
 def printprogress(msg):
@@ -71,4 +74,5 @@ def read_til_break(fptr):
 
 
 def player_games(sql_db, player):
+    """ player_games """
     pass

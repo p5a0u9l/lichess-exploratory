@@ -11,6 +11,7 @@ from lichess import sql_io
 from lichess.util import DATAROOT, MINELO, MAXELO
 
 ROWDIM, COLDIM = 0, 1
+plt.switch_backend("agg")
 
 
 def elo_bins(cdb):
@@ -30,7 +31,7 @@ def elo_bins(cdb):
     return bins
 
 
-def plot_hist_name_players(cdb):
+def plot_hist_name_players(cdb, savename):
     """ plot_hist """
     cdb.execute("SELECT N_Game from players ORDER BY N_Game DESC")
     values = cdb.fetcharray()
@@ -45,11 +46,10 @@ def plot_hist_name_players(cdb):
     plt.gca().grid(alpha=0.2)
 
     plt.suptitle('distribution of Game Count over {:,} players'.format(total))
-    plt.savefig(
-        os.path.join(DATAROOT, "plots", "white_count_distribution.png"))
+    plt.savefig(os.path.join(DATAROOT, "plots", savename))
 
 
-def plot_hist_elo_games(cdb):
+def plot_hist_elo_games(cdb, savename):
     """ plot_hist """
     bins = elo_bins(cdb)
 
@@ -74,20 +74,18 @@ def plot_hist_elo_games(cdb):
     plt.gca().grid(alpha=0.2)
 
     plt.suptitle('distribution of White ELO over {:,} games'.format(total))
-    plt.savefig(
-        os.path.join(DATAROOT, "plots", "white_elo_distribution.png"))
+    plt.savefig(os.path.join(DATAROOT, "plots", savename))
 
 
 def main():
     """ main """
-    plt.switch_backend("agg")
     cdb = sql_io.ChessDB()
 
     if sys.argv[1] == "elo-games":
-        plot_hist_elo_games(cdb)
+        plot_hist_elo_games(cdb, "white_elo_distribution.png")
 
     elif sys.argv[1] == "name-players":
-        plot_hist_name_players(cdb)
+        plot_hist_name_players(cdb, "white_count_distribution.png")
 
     else:
         print("unknown slice obtion %s..." % (sys.argv[1]))

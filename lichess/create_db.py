@@ -54,7 +54,7 @@ def process_one_file(pgn, cdb):
     """
 
     # setup sql db
-    print("worker: connecting to db %s..." % (DBNAME))
+    print("connecting to db %s..." % (cdb.name))
 
     # loop over games
     countr = itertools.count()
@@ -68,10 +68,10 @@ def process_one_file(pgn, cdb):
     print('complete')
 
 
-def create_games_table(cdb):
+def create_games_table(cdb, pgn_glob="*bz2"):
     """ create_games_table """
 
-    pgn_files = glob.glob(os.path.join(DATAROOT, "bz2", '*bz2'))
+    pgn_files = glob.glob(os.path.join(DATAROOT, "bz2", pgn_glob))
     cdb.execute(
         'CREATE TABLE IF NOT EXISTS games (%s)'
         % (', '.join([' '.join(column) for column in GAME_FIELDS])))
