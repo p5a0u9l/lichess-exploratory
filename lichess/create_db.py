@@ -8,7 +8,9 @@ import sys
 import glob
 import itertools
 
-from lichess.util import printprogress, DATAROOT, GAME_FIELDS, DBNAME
+import pandas as pd
+
+from lichess.util import printprogress, DATAROOT, GAME_FIELDS
 from lichess.util import pgn2dict, read_til_break
 from lichess import sql_io
 
@@ -85,9 +87,11 @@ def create_games_table(cdb, pgn_glob="*bz2"):
 
 def create_players_table(cdb):
     """ create_games_indices """
+    cdb.execute("DROP TABLE IF EXISTS players ")
+
     cdb.execute(
         "CREATE TABLE IF NOT EXISTS players " +
-        "(Name text, N_Game real, AvgElo real)")
+        "(Name text, N_Game real)")
 
     cdb.execute("SELECT DISTINCT White FROM games")
     players = cdb.curs.fetchall()
@@ -98,10 +102,16 @@ def create_players_table(cdb):
         cdb.execute(
             "SELECT COUNT(*) from games WHERE White = '%s'" % (player[0]),
             timed=False)
+        count = cdb.fetchone()
 
         cdb.execute(
-            "INSERT INTO players VALUES ('%s', '%d', '1')"
-            % (player[0], cdb.fetchone()))
+            "SELECT COUNT(*) from games WHERE Black = '%s'" % (player[0]),
+            timed=False)
+        count += cdb.fetchone()
+
+        cdb.execute(
+            "INSERT INTO players VALUES ('%s', '%d')"
+            % (player[0], count), timed=False)
 
         cur = next(countr)
         if cur % 100 == 0:
@@ -109,12 +119,40 @@ def create_players_table(cdb):
                 "%s: %.2f percent processed..."
                 % ('create_players_table', float(cur) / n_player * 100))
 
+    cdb.execute("CREATE INDEX IF NOT EXISTS gidx on players(N_Game)")
 
-def create_games_indices(cdb):
+
+def create_superplayers(cdb):
+    """ create_superplayers creates a games table containing the top N players
+    by game count"""
+    cdb.execute('DROP TABLE IF EXISTS superplayer_games')
+    cdb.query2dataframe("SELECT * from players ORDER BY N_Game DESC")
+    n_top = 20
+    top = cdb.dataframe.head(n_top)
+    data = pd.DataFrame()
+
+    for idx in range(n_top):
+        i_super = top.loc[idx]
+        for side in ['White', 'Black']:
+            cdb.query2dataframe(
+                "SELECT * from games WHERE %s = '%s'"
+                % (side, i_super.Name))
+            data = data.append(cdb.dataframe)
+
+    data.to_sql("superplayer_games", cdb.conn)
+
+
+def create_games_indices(cdb, table='games'):
     """ create_games_indices add relevant indexing"""
 
-    cdb.execute("CREATE INDEX IF NOT EXISTS idx_white_elo on games(WhiteElo)")
-    cdb.execute("CREATE INDEX IF NOT EXISTS idx_white on games(White)")
+    cdb.execute(
+        "CREATE INDEX IF NOT EXISTS idx_white_elo on %s(WhiteElo)" % (table))
+    cdb.execute(
+        "CREATE INDEX IF NOT EXISTS idx_black_elo on %s(BlackElo)" % (table))
+    cdb.execute(
+        "CREATE INDEX IF NOT EXISTS idx_white on %s(White)" % (table))
+    cdb.execute(
+        "CREATE INDEX IF NOT EXISTS idx_black on %s(Black)" % (table))
 
 
 def main():
@@ -123,7 +161,8 @@ def main():
     functor = {
         "games": create_games_table,
         "indices": create_games_indices,
-        "players": create_players_table
+        "players": create_players_table,
+        "superplayers": create_superplayers
     }
     functor[sys.argv[1]](cdb)
     cdb.cleanup()

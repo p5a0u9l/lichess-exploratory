@@ -4,6 +4,10 @@
 import os
 import sys
 import re
+import time
+from datetime import datetime
+
+import matplotlib.dates
 
 DATAROOT = os.path.join("/mnt", "data", "chess")
 DBNAME = "lichess_games.sql"
@@ -73,6 +77,17 @@ def read_til_break(fptr):
     return [entry.decode() for entry in txt if entry]
 
 
-def player_games(sql_db, player):
+def player_games(cdb, player):
     """ player_games """
-    pass
+    cdb.execute(
+        "SELECT * from games WHERE White = '%s'" % (player),
+        )
+    return cdb.curs.fetchall()
+
+
+def get_utc_dict(datecounts):
+    """ UTCDate """
+    result = [time.strptime(val, '%Y.%m.%d') for val in datecounts]
+    result = [datetime.fromtimestamp(time.mktime(val)) for val in result]
+    result = matplotlib.dates.date2num(result)
+    return result

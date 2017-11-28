@@ -2,13 +2,15 @@
 """
 
 import os
+import time
 import sys
 
 import matplotlib.pyplot as plt
+import pandas as pd
 import numpy as np
 
 from lichess import sql_io
-from lichess.util import DATAROOT, MINELO, MAXELO
+from lichess.util import DATAROOT, MINELO, MAXELO, get_utc_dict
 
 ROWDIM, COLDIM = 0, 1
 plt.switch_backend("agg")
@@ -29,6 +31,63 @@ def elo_bins(cdb):
         bins[elo] = cdb.fetchone()
 
     return bins
+
+
+def cull_superplayers(cdb):
+    """ cull_superplayers """
+    cdb.query2dataframe("SELECT * from players ORDER BY N_Game DESC")
+    players = cdb.dataframe
+    players = players[players.N_Game < 10000 and players.N_Game > 10]
+    import bpdb; bpdb.set_trace()
+
+
+def superplayers(cdb):
+    """ superplayers """
+    cdb.query2dataframe("SELECT * from players ORDER BY N_Game DESC")
+    players = cdb.dataframe
+
+    figs = [plt.figure(figsize=(26, 14)), plt.figure(figsize=(26, 14))]
+    frame = pd.DataFrame()
+
+    for idx in range(12):
+        i_super = players.loc[idx]
+        for side in ['White', 'Black']:
+            cdb.query2dataframe(
+                "SELECT * from superplayer_games WHERE %s = '%s'"
+                % (side, i_super.Name), timed=False)
+            frame = frame.append(cdb.dataframe)
+
+        datecounts = frame.UTCDate.value_counts(sort=False)
+        dates = get_utc_dict(datecounts.keys())
+        dcs = datecounts.values
+
+        plt.figure(figs[0].number)
+        plt.subplot(3, 4, idx + 1)
+        plt.plot_date(dates, dcs, ms=1)
+        plt.xticks(rotation=45)
+        plt.ylabel('games played per day')
+        plt.gca().grid(alpha=0.2)
+        day_avg = sum(dcs) / float(i_super.N_Game)
+        plt.gca().axhline(
+            day_avg, np.min(dates), np.max(dates))
+        plt.title('%s %d total' % (i_super.Name, i_super.N_Game))
+
+        plt.figure(figs[1].number)
+        plt.subplot(3, 4, idx + 1)
+        plt.hist(dcs)
+        plt.ylabel('%s - number of games' % (i_super.Name))
+        plt.xlabel('games played per day')
+        plt.gca().grid(alpha=0.2)
+
+    plt.figure(figs[0].number)
+    plt.suptitle(
+        'super player analysis %s' % (time.ctime()))
+    plt.savefig(
+        os.path.join(DATAROOT, "plots", "superplayers_bydate.png"))
+
+    plt.figure(figs[1].number)
+    plt.savefig(
+        os.path.join(DATAROOT, "plots", "superplayers_pdfcdf.png"))
 
 
 def plot_hist_name_players(cdb, savename):
@@ -86,6 +145,9 @@ def main():
 
     elif sys.argv[1] == "name-players":
         plot_hist_name_players(cdb, "white_count_distribution.png")
+
+    elif sys.argv[1] == "super-players":
+        superplayers(cdb)
 
     else:
         print("unknown slice obtion %s..." % (sys.argv[1]))
